@@ -1,0 +1,10 @@
+{
+  "name": "FAHR-Face Studio Mobile",
+  "short_name": "FAHR-Face",
+  "description": "Biological FaceAge, ViT Attention Rollout & MAE Explorer for Pixel 9",
+  "start_url": "/mobile",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#0b0f19",
+  "orientation": "portrait"
+}

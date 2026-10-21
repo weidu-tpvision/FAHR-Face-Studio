@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAHR-Face Studio — Biological FaceAge & Foundation Model Explorer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #e2e8f0;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .glass-card {
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+    }
+    .patch-grid-overlay {
+      background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.32) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.32) 1px, transparent 1px);
+      background-size: calc(100% / 7) calc(100% / 7);
+    }
+    input[type="range"] {
+      accent-color: #38bdf8;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-slate-800 bg-slate-950/90 sticky top-0 z-30 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20 font-bold text-white text-lg">
+          FF
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">FAHR-Face Studio</h1>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30 font-medium">
+              ViT-MAE 112×112
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">
+            Foundation AI for Health Recognition using Face Photographs (AIM-Harvard · <em>The Lancet Digital Health</em>, 2026)
+          </p>
+        </div>
+      </div>
+
+      <!-- Status Pills -->
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <a href="/mobile" class="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 font-medium transition flex items-center gap-1">
+          <span>📱 Pixel 9 Mobile UI</span>
+        </a>
+        <div id="status-device" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>Device: Checking...</span>
+        </div>
+        <div id="status-age-model" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400">
+          FAHR-FaceAge: Standby
+        </div>
+        <div id="status-mae-model" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400">
+          FAHR-Face MAE: Standby
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- LEFT COLUMN: Input, Webcam & Multi-Face Canvas (5 cols) -->
+    <section class="lg:col-span-5 flex flex-col gap-5">
+
+      <!-- Upload & Webcam Controls Card -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">1. Photograph Input</h2>
+          <div class="flex items-center gap-2">
+            <button id="btn-sample" type="button"
+              class="text-xs px-3 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 transition flex items-center gap-1.5 font-medium">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+              </svg>
+              <span>Try Sample Portrait</span>
+            </button>
+            <button id="btn-webcam-toggle" type="button"
+              class="text-xs px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 transition flex items-center gap-1.5 font-medium">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <span id="webcam-btn-label">Use Webcam</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Inline Error Banner -->
+        <div id="error-banner" class="hidden mb-3 p-3 rounded-xl bg-rose-950/70 border border-rose-500/40 text-xs text-rose-200 flex items-center justify-between gap-2">
+          <span id="error-banner-text"></span>
+          <button type="button" onclick="document.getElementById('error-banner').classList.add('hidden')" class="text-rose-400 hover:text-white font-bold px-1">✕</button>
+        </div>
+
+        <!-- Dropzone -->
+        <label id="dropzone"
+          class="border-2 border-dashed border-slate-700 hover:border-sky-500/60 rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition bg-slate-900/40 hover:bg-slate-900/70">
+          <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp" class="hidden" />
+          <svg class="w-7 h-7 text-sky-400 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span class="text-sm font-medium text-slate-200">Click to upload or drag & drop a face photo</span>
+          <span class="text-xs text-slate-400 mt-0.5">Supports single portraits or multi-person photos (JPG, PNG, WebP)</span>
+        </label>
+
+        <!-- Live Webcam Container (Hidden by default) -->
+        <div id="webcam-panel" class="hidden mt-4 rounded-xl overflow-hidden bg-black border border-slate-800 relative">
+          <video id="webcam-video" autoplay playsinline class="w-full max-h-72 object-contain bg-black"></video>
+          <div class="p-3 bg-slate-900/90 flex items-center justify-between">
+            <span class="text-xs text-slate-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> Live Camera
+            </span>
+            <button id="btn-webcam-capture" type="button"
+              class="px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs transition">
+              Capture & Analyze Frame
+            </button>
+          </div>
+        </div>
+
+        <!-- Parameters Row -->
+        <div class="mt-4 pt-3.5 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="chrono-age-input" class="block text-xs font-medium text-slate-300 mb-1">
+              Chronological Age (Optional, years)
+            </label>
+            <input id="chrono-age-input" type="number" min="1" max="120" step="0.5" placeholder="e.g. 42"
+              class="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-sky-500" />
+          </div>
+          <div class="flex flex-col justify-end">
+            <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none py-1.5">
+              <input id="already-cropped-input" type="checkbox"
+                class="rounded bg-slate-900 border-slate-700 text-sky-500 focus:ring-sky-500" />
+              <span>Image is already cropped & aligned</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Analyze Button & Loading Banner -->
+        <button id="btn-analyze" type="button" disabled
+          class="mt-3.5 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-lg shadow-sky-500/20 transition flex items-center justify-center gap-2">
+          <span id="analyze-btn-text">Select or Capture a Photo to Analyze</span>
+        </button>
+
+        <div id="loading-banner" class="hidden mt-3 p-3 rounded-xl bg-sky-950/50 border border-sky-500/30 text-xs text-sky-200 flex items-center gap-2.5">
+          <svg class="w-4 h-4 animate-spin text-sky-400 shrink-0" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+          </svg>
+          <span id="loading-banner-text">Running face detection, alignment & FAHR-FaceAge ViT inference...</span>
+        </div>
+      </div>
+
+      <!-- Detected Faces & Interactive Image Canvas Card -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl flex-1 flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">2. Face Detection & Landmarks</h2>
+          <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+            <input id="show-landmarks-toggle" type="checkbox" checked class="rounded bg-slate-900 border-slate-700 text-sky-500" />
+            <span>Show 5-Point Landmarks</span>
+          </label>
+        </div>
+
+        <!-- Interactive Canvas Wrapper -->
+        <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800/90 flex items-center justify-center min-h-[280px]">
+          <canvas id="photo-canvas" class="max-w-full max-h-[380px] cursor-pointer hidden"></canvas>
+          <div id="canvas-placeholder" class="text-center p-6 text-slate-500 text-xs">
+            No image loaded yet. Click <strong>"Try Sample Portrait"</strong> or upload a photo above.
+          </div>
+        </div>
+
+        <!-- Multi-Face Selector Strip -->
+        <div id="face-selector-container" class="hidden mt-4">
+          <div class="text-xs text-slate-400 mb-2 flex items-center justify-between">
+            <span>Detected Faces (click to inspect):</span>
+            <span id="face-count-badge" class="text-sky-400 font-medium"></span>
+          </div>
+          <div id="face-selector-strip" class="flex gap-2.5 overflow-x-auto pb-1"></div>
+        </div>
+
+        <!-- Geometric Alignment & Landmark Telemetry -->
+        <div id="telemetry-panel" class="hidden mt-4 pt-3.5 border-t border-slate-800/80 flex-1 flex flex-col justify-between gap-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-300">Alignment & Landmark Telemetry</span>
+            <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              Affine Eye-Aligned → 112×112 RGB
+            </span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+              <div class="text-[10px] text-slate-400">Face Bounding Box</div>
+              <div id="tel-bbox" class="font-mono text-slate-200 font-semibold mt-0.5">—</div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+              <div class="text-[10px] text-slate-400">Tilt Angle Corrected</div>
+              <div id="tel-angle" class="font-mono text-sky-300 font-semibold mt-0.5">—</div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+              <div class="text-[10px] text-slate-400">Inter-Ocular Dist</div>
+              <div id="tel-iod" class="font-mono text-indigo-300 font-semibold mt-0.5">—</div>
+            </div>
+          </div>
+          <div id="tel-landmarks-grid" class="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400 font-mono grid grid-cols-2 gap-x-4 gap-y-1">
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- RIGHT COLUMN: FAHR-FaceAge & FAHR-Face MAE Results (7 cols) -->
+    <section class="lg:col-span-7 flex flex-col gap-5">
+
+      <!-- Card A: Biological Age & Age Gap (ΔAge) -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">
+              3. FAHR-FaceAge Biomarker Analysis
+            </h2>
+            <p class="text-xs text-slate-400">
+              Predicted biological/apparent age from eye-aligned 112×112 RGB crop
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="inference-time-badge" class="text-xs px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400">
+              Awaiting analysis
+            </span>
+            <button id="btn-export-json" type="button" disabled
+              class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 transition">
+              Export JSON
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <!-- Predicted FaceAge Metric -->
+          <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
+            <span class="text-xs text-slate-400 font-medium">Predicted FAHR-FaceAge</span>
+            <div class="my-2 flex items-baseline gap-1.5">
+              <span id="val-predicted-age" class="text-3xl font-extrabold text-sky-400">—</span>
+              <span class="text-xs text-slate-400">years</span>
+            </div>
+            <span id="val-face-conf" class="text-[11px] text-slate-400">Model MAE: ±5.1 yrs (APPA-REAL)</span>
+          </div>
+
+          <!-- Chronological Age Metric -->
+          <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
+            <span class="text-xs text-slate-400 font-medium">Chronological Age</span>
+            <div class="my-2 flex items-baseline gap-1.5">
+              <span id="val-chrono-age" class="text-3xl font-extrabold text-slate-200">—</span>
+              <span class="text-xs text-slate-400">years</span>
+            </div>
+            <span class="text-[11px] text-slate-400">Enter actual age on the left</span>
+          </div>
+
+          <!-- Age Gap (ΔAge) Metric -->
+          <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
+            <span class="text-xs text-slate-400 font-medium">Age Gap (ΔAge = FaceAge − Actual)</span>
+            <div class="my-2 flex items-baseline gap-1.5">
+              <span id="val-age-gap" class="text-3xl font-extrabold text-slate-400">—</span>
+              <span class="text-xs text-slate-400">years</span>
+            </div>
+            <span id="val-age-gap-status" class="text-[11px] text-slate-400">Set chronological age for ΔAge</span>
+          </div>
+        </div>
+
+        <!-- Visual ΔAge Gauge Bar -->
+        <div id="age-gap-gauge-wrapper" class="hidden mt-4 pt-4 border-t border-slate-800/80">
+          <div class="flex justify-between text-[11px] text-slate-300 mb-1.5">
+            <span class="text-emerald-400 font-medium">← Younger Biological Appearance (-15 yrs)</span>
+            <span class="text-slate-300 font-medium">0 (Concordant)</span>
+            <span class="text-amber-400 font-medium">Older Biological Appearance (+15 yrs) →</span>
+          </div>
+          <div class="h-3 w-full rounded-full bg-gradient-to-r from-emerald-500/40 via-slate-700 to-rose-500/50 relative overflow-hidden border border-slate-700">
+            <div class="absolute top-0 bottom-0 left-1/2 w-0.5 bg-slate-300/60"></div>
+            <div id="age-gap-marker"
+              class="absolute top-0 bottom-0 w-3 h-3 rounded-full bg-white shadow-md border-2 border-sky-400 transition-all duration-300"
+              style="left: calc(50% - 6px);"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card B: ViT Attention Rollout & Anatomical Attribution -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">
+              4. Explainable AI — ViT Self-Attention Rollout (12L × 12H)
+            </h2>
+            <p class="text-xs text-slate-400">
+              Highlights which 16×16 facial patches contributed most to the CLS age regression head
+            </p>
+          </div>
+          <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer select-none shrink-0 pt-0.5">
+            <input id="toggle-patch-grid" type="checkbox" checked class="rounded bg-slate-900 border-slate-700 text-sky-500" />
+            <span>Show 7×7 Patch Grid</span>
+          </label>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+          <!-- Interactive Blended Face + Heatmap Viewer (5 cols) -->
+          <div class="md:col-span-5 flex flex-col items-center">
+            <div class="relative w-48 h-48 rounded-xl overflow-hidden border border-slate-700 bg-slate-950 shadow-inner">
+              <img id="img-aligned-face" src="" alt="Aligned 112x112 Face" class="w-full h-full object-cover hidden" />
+              <img id="img-attn-heatmap" src="" alt="Attention Heatmap"
+                class="w-full h-full object-cover absolute inset-0 transition-opacity duration-150 hidden"
+                style="opacity: 0.55;" />
+              <div id="patch-grid-layer" class="absolute inset-0 patch-grid-overlay pointer-events-none"></div>
+              <div id="attn-placeholder" class="absolute inset-0 flex items-center justify-center text-xs text-slate-500 text-center p-4">
+                112×112 Aligned Crop & Attention Map
+              </div>
+            </div>
+
+            <!-- Heatmap Opacity Slider -->
+            <div class="w-48 mt-3">
+              <div class="flex justify-between text-[11px] text-slate-300 mb-1">
+                <span>Aligned Crop</span>
+                <span id="heatmap-opacity-label" class="text-sky-300 font-medium">Heatmap: 55%</span>
+              </div>
+              <input id="heatmap-opacity-slider" type="range" min="0" max="100" value="55" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+            </div>
+          </div>
+
+          <!-- Regional Facial Attribution Bars (7 cols) -->
+          <div class="md:col-span-7 flex flex-col gap-3">
+            <div class="text-xs font-medium text-slate-200 mb-0.5">
+              Anatomical Zone Attention Breakdown (CLS Rollout Share)
+            </div>
+            <div id="regional-bars-container" class="flex flex-col gap-2.5">
+              <div class="text-xs text-slate-500 italic">Run analysis to view regional attention weights.</div>
+            </div>
+            <div class="mt-1 p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
+              <strong class="text-sky-300">How this works:</strong> FAHR-Face splits the aligned 112×112 face into 49 patches (7×7 grid of 16×16 pixels). We compute <em>Attention Rollout</em> across all 12 Vision Transformer layers (averaging the 12 heads per layer with residual connections) to trace which facial zones drive the final age prediction.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card C: FAHR-Face Foundation Model (MAE 75% Masked Reconstruction) -->
+      <div class="glass-card rounded-2xl p-5 shadow-xl">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-200">
+                5. FAHR-Face Foundation Model — MAE Patch Reconstruction
+              </h2>
+              <span class="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                fahr_face.pth
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Pretrained on &gt;40M faces (WebFace42M). Masks out patches and reconstructs missing facial pixels from visible context.
+            </p>
+          </div>
+
+          <button id="btn-run-mae" type="button" disabled
+            class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-xs transition shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 shrink-0">
+            <span id="mae-btn-text">Reconstruct Masked Face</span>
+          </button>
+        </div>
+
+        <!-- MAE Controls -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 p-3.5 rounded-xl bg-slate-900/70 border border-slate-800">
+          <div>
+            <div class="flex justify-between text-xs text-slate-300 mb-1">
+              <span>Patch Masking Ratio</span>
+              <span id="mae-mask-ratio-label" class="font-semibold text-indigo-400">75% (37 / 49 patches masked)</span>
+            </div>
+            <input id="mae-mask-slider" type="range" min="25" max="90" step="5" value="75" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-xs text-slate-300">
+              <div>MAE Pixel MSE Loss: <strong id="mae-loss-val" class="text-indigo-300">—</strong></div>
+              <div>Inference Time: <strong id="mae-time-val" class="text-slate-200">—</strong></div>
+            </div>
+            <button id="btn-reroll-mae" type="button" disabled
+              class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs text-slate-200 border border-slate-700 transition">
+              New Random Mask
+            </button>
+          </div>
+        </div>
+
+        <!-- 4-Panel MAE Visual Output -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div class="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+            <div class="aspect-square rounded-lg overflow-hidden bg-slate-950 mb-2 flex items-center justify-center">
+              <img id="mae-img-orig" class="w-full h-full object-cover hidden" alt="Original 112x112" />
+              <span class="mae-placeholder text-[11px] text-slate-600">Original</span>
+            </div>
+            <div class="text-xs font-medium text-slate-200">1. Aligned 112×112</div>
+            <div class="text-[10px] text-slate-400">49 patches (7×7)</div>
+          </div>
+
+          <div class="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+            <div class="aspect-square rounded-lg overflow-hidden bg-slate-950 mb-2 flex items-center justify-center">
+              <img id="mae-img-masked" class="w-full h-full object-cover hidden" alt="Masked Input" />
+              <span class="mae-placeholder text-[11px] text-slate-600">Masked Input</span>
+            </div>
+            <div class="text-xs font-medium text-slate-200">2. Masked Input</div>
+            <div id="mae-visible-sub" class="text-[10px] text-slate-400">Only 25% visible</div>
+          </div>
+
+          <div class="p-2.5 rounded-xl bg-slate-900/80 border border-indigo-500/40">
+            <div class="aspect-square rounded-lg overflow-hidden bg-slate-950 mb-2 flex items-center justify-center">
+              <img id="mae-img-composite" class="w-full h-full object-cover hidden" alt="MAE Composite" />
+              <span class="mae-placeholder text-[11px] text-slate-600">Composite</span>
+            </div>
+            <div class="text-xs font-medium text-indigo-300">3. MAE Inpainted</div>
+            <div class="text-[10px] text-slate-400">Visible + Reconstructed</div>
+          </div>
+
+          <div class="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+            <div class="aspect-square rounded-lg overflow-hidden bg-slate-950 mb-2 flex items-center justify-center">
+              <img id="mae-img-full" class="w-full h-full object-cover hidden" alt="Raw MAE Decoder" />
+              <span class="mae-placeholder text-[11px] text-slate-600">Raw Decoder</span>
+            </div>
+            <div class="text-xs font-medium text-slate-200">4. Raw MAE Output</div>
+            <div class="text-[10px] text-slate-400">All 49 decoder patches</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Footer Disclaimer -->
+  <footer class="border-t border-slate-800/80 py-4 px-6 text-center text-xs text-slate-500">
+    For academic research and educational exploration only. Model weights (CC BY-NC-SA 4.0) by Haugg, Lee, et al. (AIM-Harvard, <em>The Lancet Digital Health</em> 2026).
+  </footer>
+
+  <script>
+    // State
+    let currentFileBlob = null;
+    let currentAnalysisData = null;
+    let selectedFaceIndex = 0;
+    let loadedOriginalImg = null;
+    let webcamStream = null;
+
+    // DOM Elements
+    const fileInput = document.getElementById('file-input');
+    const dropzone = document.getElementById('dropzone');
+    const btnSample = document.getElementById('btn-sample');
+    const chronoAgeInput = document.getElementById('chrono-age-input');
+    const alreadyCroppedInput = document.getElementById('already-cropped-input');
+    const btnAnalyze = document.getElementById('btn-analyze');
+    const analyzeBtnText = document.getElementById('analyze-btn-text');
+    const loadingBanner = document.getElementById('loading-banner');
+    const loadingBannerText = document.getElementById('loading-banner-text');
+    const errorBanner = document.getElementById('error-banner');
+    const errorBannerText = document.getElementById('error-banner-text');
+
+    const photoCanvas = document.getElementById('photo-canvas');
+    const canvasPlaceholder = document.getElementById('canvas-placeholder');
+    const showLandmarksToggle = document.getElementById('show-landmarks-toggle');
+    const faceSelectorContainer = document.getElementById('face-selector-container');
+    const faceSelectorStrip = document.getElementById('face-selector-strip');
+    const faceCountBadge = document.getElementById('face-count-badge');
+
+    // Webcam DOM
+    const btnWebcamToggle = document.getElementById('btn-webcam-toggle');
+    const webcamBtnLabel = document.getElementById('webcam-btn-label');
+    const webcamPanel = document.getElementById('webcam-panel');
+    const webcamVideo = document.getElementById('webcam-video');
+    const btnWebcamCapture = document.getElementById('btn-webcam-capture');
+
+    // Results DOM
+    const valPredictedAge = document.getElementById('val-predicted-age');
+    const valChronoAge = document.getElementById('val-chrono-age');
+    const valAgeGap = document.getElementById('val-age-gap');
+    const valAgeGapStatus = document.getElementById('val-age-gap-status');
+    const valFaceConf = document.getElementById('val-face-conf');
+    const inferenceTimeBadge = document.getElementById('inference-time-badge');
+    const btnExportJson = document.getElementById('btn-export-json');
+    const ageGapGaugeWrapper = document.getElementById('age-gap-gauge-wrapper');
+    const ageGapMarker = document.getElementById('age-gap-marker');
+
+    // Attention DOM
+    const imgAlignedFace = document.getElementById('img-aligned-face');
+    const imgAttnHeatmap = document.getElementById('img-attn-heatmap');
+    const attnPlaceholder = document.getElementById('attn-placeholder');
+    const heatmapOpacitySlider = document.getElementById('heatmap-opacity-slider');
+    const heatmapOpacityLabel = document.getElementById('heatmap-opacity-label');
+    const togglePatchGrid = document.getElementById('toggle-patch-grid');
+    const patchGridLayer = document.getElementById('patch-grid-layer');
+    const regionalBarsContainer = document.getElementById('regional-bars-container');
+
+    // MAE DOM
+    const btnRunMae = document.getElementById('btn-run-mae');
+    const maeBtnText = document.getElementById('mae-btn-text');
+    const btnRerollMae = document.getElementById('btn-reroll-mae');
+    const maeMaskSlider = document.getElementById('mae-mask-slider');
+    const maeMaskRatioLabel = document.getElementById('mae-mask-ratio-label');
+    const maeLossVal = document.getElementById('mae-loss-val');
+    const maeTimeVal = document.getElementById('mae-time-val');
+    const maeVisibleSub = document.getElementById('mae-visible-sub');
+
+    function showError(msg) {
+      errorBannerText.textContent = msg;
+      errorBanner.classList.remove('hidden');
+    }
+
+    function hideError() {
+      errorBanner.classList.add('hidden');
+    }
+
+    // Update top status pills
+    async function refreshStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const st = await res.json();
+        updateStatusPills(st);
+      } catch (e) {
+        console.error('Status check failed:', e);
+      }
+    }
+
+    function updateStatusPills(st) {
+      if (!st) return;
+      document.getElementById('status-device').innerHTML =
+        `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Device: ${st.device.toUpperCase()}</span>`;
+      const ageEl = document.getElementById('status-age-model');
+      ageEl.textContent = st.age_model_loaded
+        ? 'FAHR-FaceAge: Loaded in RAM'
+        : (st.age_checkpoint_cached ? 'FAHR-FaceAge: Cached on Disk' : 'FAHR-FaceAge: Auto-Download Ready');
+      ageEl.className = `px-2.5 py-1 rounded-lg border text-xs ${
+        st.age_model_loaded ? 'bg-sky-950/60 border-sky-500/40 text-sky-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+      }`;
+
+      const maeEl = document.getElementById('status-mae-model');
+      maeEl.textContent = st.mae_model_loaded
+        ? 'FAHR-Face MAE: Loaded in RAM'
+        : (st.mae_checkpoint_cached ? 'FAHR-Face MAE: Cached on Disk' : 'FAHR-Face MAE: Auto-Download Ready');
+      maeEl.className = `px-2.5 py-1 rounded-lg border text-xs ${
+        st.mae_model_loaded ? 'bg-indigo-950/60 border-indigo-500/40 text-indigo-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+      }`;
+    }
+
+    // Try Sample Portrait Button
+    btnSample.addEventListener('click', async () => {
+      hideError();
+      try {
+        const res = await fetch('/static/sample_face.jpg');
+        if (!res.ok) throw new Error('Sample portrait file not found.');
+        const blob = await res.blob();
+        if (!chronoAgeInput.value) {
+          chronoAgeInput.value = '42';
+        }
+        alreadyCroppedInput.checked = false;
+        currentFileBlob = new File([blob], 'sample_face.jpg', { type: 'image/jpeg' });
+        btnAnalyze.disabled = false;
+        analyzeBtnText.textContent = 'Analyze Photograph with FAHR-FaceAge';
+        await runAnalysis(true);
+      } catch (err) {
+        showError('Could not load sample portrait: ' + err.message);
+      }
+    });
+
+    // File selection & Drag-and-Drop
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleSelectedBlob(e.target.files[0]);
+      }
+    });
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('border-sky-400');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('border-sky-400');
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('border-sky-400');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleSelectedBlob(e.dataTransfer.files[0]);
+      }
+    });
+
+    function handleSelectedBlob(blob) {
+      hideError();
+      currentFileBlob = blob;
+      btnAnalyze.disabled = false;
+      analyzeBtnText.textContent = 'Analyze Photograph with FAHR-FaceAge';
+      runAnalysis(true);
+    }
+
+    // Webcam Controls
+    btnWebcamToggle.addEventListener('click', async () => {
+      if (webcamStream) {
+        stopWebcam();
+        return;
+      }
+      try {
+        webcamStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 1280, height: 720 } });
+        webcamVideo.srcObject = webcamStream;
+        webcamPanel.classList.remove('hidden');
+        webcamBtnLabel.textContent = 'Close Webcam';
+      } catch (err) {
+        showError('Could not access webcam: ' + err.message);
+      }
+    });
+
+    function stopWebcam() {
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(t => t.stop());
+        webcamStream = null;
+      }
+      webcamPanel.classList.add('hidden');
+      webcamBtnLabel.textContent = 'Use Webcam';
+    }
+
+    btnWebcamCapture.addEventListener('click', () => {
+      if (!webcamStream) return;
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = webcamVideo.videoWidth || 640;
+      tempCanvas.height = webcamVideo.videoHeight || 480;
+      const ctx = tempCanvas.getContext('2d');
+      ctx.drawImage(webcamVideo, 0, 0, tempCanvas.width, tempCanvas.height);
+      tempCanvas.toBlob((blob) => {
+        if (blob) {
+          stopWebcam();
+          handleSelectedBlob(new File([blob], 'webcam_capture.jpg', { type: 'image/jpeg' }));
+        }
+      }, 'image/jpeg', 0.95);
+    });
+
+    // Analyze API Call
+    btnAnalyze.addEventListener('click', () => {
+      if (currentFileBlob) runAnalysis(true);
+    });
+
+    async function runAnalysis(autoRunMae = false) {
+      if (!currentFileBlob) return;
+      hideError();
+      btnAnalyze.disabled = true;
+      loadingBanner.classList.remove('hidden');
+      loadingBannerText.textContent = 'Detecting faces, aligning eyes & running FAHR-FaceAge ViT inference...';
+
+      const formData = new FormData();
+      formData.append('file', currentFileBlob);
+      if (chronoAgeInput.value) {
+        formData.append('chronological_age', chronoAgeInput.value);
+      }
+      formData.append('already_cropped', alreadyCroppedInput.checked ? 'true' : 'false');
+
+      try {
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Analysis request failed');
+        }
+        const data = await res.json();
+        currentAnalysisData = data;
+        selectedFaceIndex = 0;
+        btnExportJson.disabled = false;
+        updateStatusPills(data.status);
+
+        // Load original image for canvas rendering
+        const img = new Image();
+        img.onload = () => {
+          loadedOriginalImg = img;
+          renderPhotoCanvas();
+          renderFaceSelectorStrip();
+          selectFace(0);
+          if (autoRunMae) {
+            triggerMAE(42);
+          }
+        };
+        img.src = data.original_image_b64;
+      } catch (err) {
+        showError('Analysis error: ' + err.message);
+      } finally {
+        btnAnalyze.disabled = false;
+        loadingBanner.classList.add('hidden');
+      }
+    }
+
+    // Export JSON report
+    btnExportJson.addEventListener('click', () => {
+      if (!currentAnalysisData) return;
+      const exportPayload = {
+        timestamp: new Date().toISOString(),
+        image_width: currentAnalysisData.image_width,
+        image_height: currentAnalysisData.image_height,
+        num_faces_detected: currentAnalysisData.num_faces_detected,
+        faces: currentAnalysisData.faces.map(f => ({
+          face_id: f.face_id,
+          bbox: f.bbox,
+          confidence: f.confidence,
+          landmarks: f.landmarks,
+          predicted_age: f.predicted_age,
+          chronological_age: chronoAgeInput.value ? parseFloat(chronoAgeInput.value) : null,
+          age_gap: chronoAgeInput.value ? Number((f.predicted_age - parseFloat(chronoAgeInput.value)).toFixed(2)) : null,
+          regional_attribution: f.regional_attribution,
+          attention_grid_7x7: f.attention_grid_7x7,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'fahr_face_analysis_report.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Draw original image + bounding boxes + 5-point landmarks on canvas
+    function renderPhotoCanvas() {
+      if (!loadedOriginalImg || !currentAnalysisData) return;
+      canvasPlaceholder.classList.add('hidden');
+      photoCanvas.classList.remove('hidden');
+
+      photoCanvas.width = loadedOriginalImg.width;
+      photoCanvas.height = loadedOriginalImg.height;
+      const ctx = photoCanvas.getContext('2d');
+      ctx.drawImage(loadedOriginalImg, 0, 0);
+
+      const faces = currentAnalysisData.faces || [];
+      const scaleFactor = Math.max(1, Math.min(loadedOriginalImg.width, loadedOriginalImg.height) / 400);
+
+      faces.forEach((f, idx) => {
+        const isSelected = idx === selectedFaceIndex;
+        const [x, y, w, h] = f.bbox;
+
+        ctx.strokeStyle = isSelected ? '#38bdf8' : 'rgba(148, 163, 184, 0.75)';
+        ctx.lineWidth = (isSelected ? 3.5 : 2) * scaleFactor;
+        ctx.strokeRect(x, y, w, h);
+
+        // Label pill above box
+        const label = `Face #${idx + 1}: ${f.predicted_age.toFixed(1)} yrs`;
+        ctx.font = `bold ${Math.round(13 * scaleFactor)}px Inter, sans-serif`;
+        const textWidth = ctx.measureText(label).width;
+        const pad = 6 * scaleFactor;
+        const pillH = 22 * scaleFactor;
+        const pillY = Math.max(0, y - pillH - 2);
+
+        ctx.fillStyle = isSelected ? '#0284c7' : 'rgba(15, 23, 42, 0.85)';
+        ctx.fillRect(x, pillY, textWidth + pad * 2, pillH);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, x + pad, pillY + pillH * 0.72);
+
+        // Draw 5 landmarks if toggled
+        if (showLandmarksToggle.checked && f.landmarks) {
+          const pts = [
+            { pt: f.landmarks.right_eye, color: '#38bdf8' },
+            { pt: f.landmarks.left_eye, color: '#38bdf8' },
+            { pt: f.landmarks.nose, color: '#facc15' },
+            { pt: f.landmarks.right_mouth, color: '#f472b6' },
+            { pt: f.landmarks.left_mouth, color: '#f472b6' },
+          ];
+          // Draw eye alignment line
+          ctx.beginPath();
+          ctx.moveTo(f.landmarks.right_eye[0], f.landmarks.right_eye[1]);
+          ctx.lineTo(f.landmarks.left_eye[0], f.landmarks.left_eye[1]);
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+          ctx.lineWidth = 2 * scaleFactor;
+          ctx.stroke();
+
+          pts.forEach(({ pt, color }) => {
+            ctx.beginPath();
+            ctx.arc(pt[0], pt[1], 4 * scaleFactor, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+          });
+        }
+      });
+    }
+
+    showLandmarksToggle.addEventListener('change', renderPhotoCanvas);
+
+    // Click on canvas to switch selected face
+    photoCanvas.addEventListener('click', (e) => {
+      if (!currentAnalysisData || !loadedOriginalImg) return;
+      const rect = photoCanvas.getBoundingClientRect();
+      const clickX = ((e.clientX - rect.left) / rect.width) * photoCanvas.width;
+      const clickY = ((e.clientY - rect.top) / rect.height) * photoCanvas.height;
+
+      const faces = currentAnalysisData.faces || [];
+      for (let i = 0; i < faces.length; i++) {
+        const [x, y, w, h] = faces[i].bbox;
+        if (clickX >= x && clickX <= x + w && clickY >= y && clickY <= y + h) {
+          selectFace(i);
+          break;
+        }
+      }
+    });
+
+    function renderFaceSelectorStrip() {
+      const faces = currentAnalysisData?.faces || [];
+      if (faces.length <= 0) {
+        faceSelectorContainer.classList.add('hidden');
+        return;
+      }
+      faceSelectorContainer.classList.remove('hidden');
+      faceCountBadge.textContent = `${faces.length} ${faces.length === 1 ? 'face' : 'faces'} analyzed`;
+      faceSelectorStrip.innerHTML = '';
+
+      faces.forEach((f, idx) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        const isSel = idx === selectedFaceIndex;
+        btn.className = `flex items-center gap-2 p-1.5 pr-3 rounded-xl border text-left transition shrink-0 ${
+          isSel
+            ? 'bg-sky-500/15 border-sky-400 text-white'
+            : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:border-slate-700'
+        }`;
+        btn.innerHTML = `
+          <img src="${f.aligned_face_b64}" class="w-10 h-10 rounded-lg object-cover border border-slate-700" />
+          <div>
+            <div class="text-xs font-semibold text-slate-200">Face #${idx + 1}</div>
+            <div class="text-[11px] text-sky-400 font-medium">${f.predicted_age.toFixed(1)} yrs</div>
+          </div>
+        `;
+        btn.addEventListener('click', () => selectFace(idx));
+        faceSelectorStrip.appendChild(btn);
+      });
+    }
+
+    function selectFace(idx) {
+      if (!currentAnalysisData || !currentAnalysisData.faces[idx]) return;
+      selectedFaceIndex = idx;
+      renderPhotoCanvas();
+      renderFaceSelectorStrip();
+
+      const face = currentAnalysisData.faces[idx];
+      valPredictedAge.textContent = face.predicted_age.toFixed(1);
+      valFaceConf.textContent = face.is_fallback
+        ? 'Direct full-image crop (pre-aligned fallback)'
+        : `Face Detection Confidence: ${(face.confidence * 100).toFixed(1)}%`;
+      inferenceTimeBadge.textContent = `ViT Inference: ${face.inference_ms} ms (${face.device.toUpperCase()})`;
+
+      updateAgeGapUI(face.predicted_age);
+
+      // Update Attention Viewer
+      attnPlaceholder.classList.add('hidden');
+      imgAlignedFace.src = face.aligned_face_b64;
+      imgAlignedFace.classList.remove('hidden');
+      imgAttnHeatmap.src = face.attention_heatmap_b64;
+      imgAttnHeatmap.classList.remove('hidden');
+
+      // Render Regional Attribution Bars
+      renderRegionalAttribution(face.regional_attribution);
+
+      // Update Telemetry Panel
+      const telPanel = document.getElementById('telemetry-panel');
+      telPanel.classList.remove('hidden');
+      const [bx, by, bw, bh] = face.bbox;
+      document.getElementById('tel-bbox').textContent = `${bw}×${bh} @ (${bx},${by})`;
+      const ang = face.alignment_angle_deg ?? 0.0;
+      document.getElementById('tel-angle').textContent = `${ang >= 0 ? '+' : ''}${ang.toFixed(2)}°`;
+      document.getElementById('tel-iod').textContent = face.interocular_px ? `${face.interocular_px} px` : 'N/A';
+
+      const lmGrid = document.getElementById('tel-landmarks-grid');
+      if (face.landmarks) {
+        lmGrid.innerHTML = `
+          <div><span class="text-sky-400">●</span> R-Eye: (${face.landmarks.right_eye[0]}, ${face.landmarks.right_eye[1]})</div>
+          <div><span class="text-sky-400">●</span> L-Eye: (${face.landmarks.left_eye[0]}, ${face.landmarks.left_eye[1]})</div>
+          <div><span class="text-yellow-400">●</span> Nose: (${face.landmarks.nose[0]}, ${face.landmarks.nose[1]})</div>
+          <div><span class="text-pink-400">●</span> Mouth: (${face.landmarks.right_mouth[0]}, ${face.landmarks.right_mouth[1]})–(${face.landmarks.left_mouth[0]}, ${face.landmarks.left_mouth[1]})</div>
+        `;
+      } else {
+        lmGrid.innerHTML = `<div class="col-span-2 text-slate-500">Pre-cropped input (no landmarks needed)</div>`;
+      }
+
+      // Enable MAE button for this face
+      btnRunMae.disabled = false;
+      btnRerollMae.disabled = false;
+    }
+
+    // Live update of Age Gap when Chronological Age input changes
+    chronoAgeInput.addEventListener('input', () => {
+      if (!currentAnalysisData) return;
+      const face = currentAnalysisData.faces[selectedFaceIndex];
+      if (face) updateAgeGapUI(face.predicted_age);
+    });
+
+    function updateAgeGapUI(predictedAge) {
+      const chronoVal = parseFloat(chronoAgeInput.value);
+      if (!isNaN(chronoVal) && chronoVal > 0) {
+        valChronoAge.textContent = chronoVal.toFixed(1);
+        const gap = predictedAge - chronoVal;
+        const sign = gap > 0 ? '+' : '';
+        valAgeGap.textContent = `${sign}${gap.toFixed(1)}`;
+
+        ageGapGaugeWrapper.classList.remove('hidden');
+        // Map [-15, +15] to [5%, 95%]
+        const clamped = Math.max(-15, Math.min(15, gap));
+        const pct = 50 + (clamped / 15) * 45;
+        ageGapMarker.style.left = `calc(${pct}% - 6px)`;
+
+        if (gap <= -2.5) {
+          valAgeGap.className = 'text-3xl font-extrabold text-emerald-400';
+          valAgeGapStatus.textContent = 'Decelerated Facial Aging (Younger Biological Appearance)';
+          valAgeGapStatus.className = 'text-[11px] text-emerald-400 font-medium';
+        } else if (gap >= 2.5) {
+          valAgeGap.className = 'text-3xl font-extrabold text-amber-400';
+          valAgeGapStatus.textContent = 'Accelerated Facial Aging (Older Biological Appearance)';
+          valAgeGapStatus.className = 'text-[11px] text-amber-400 font-medium';
+        } else {
+          valAgeGap.className = 'text-3xl font-extrabold text-sky-300';
+          valAgeGapStatus.textContent = 'Concordant Biological & Chronological Age';
+          valAgeGapStatus.className = 'text-[11px] text-slate-300';
+        }
+      } else {
+        valChronoAge.textContent = '—';
+        valAgeGap.textContent = '—';
+        valAgeGap.className = 'text-3xl font-extrabold text-slate-400';
+        valAgeGapStatus.textContent = 'Enter chronological age on the left to compute ΔAge';
+        valAgeGapStatus.className = 'text-[11px] text-slate-500';
+        ageGapGaugeWrapper.classList.add('hidden');
+      }
+    }
+
+    function renderRegionalAttribution(regions) {
+      if (!regions) return;
+      regionalBarsContainer.innerHTML = '';
+      const entries = Object.entries(regions).sort((a, b) => b[1] - a[1]);
+      entries.forEach(([zone, pct], i) => {
+        const row = document.createElement('div');
+        const barColor = i === 0 ? 'from-sky-400 to-indigo-500' : 'from-slate-500 to-slate-400';
+        row.innerHTML = `
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-200 font-medium">${zone}</span>
+            <span class="text-sky-300 font-semibold">${pct.toFixed(1)}%</span>
+          </div>
+          <div class="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+            <div class="h-full rounded-full bg-gradient-to-r ${barColor}" style="width: ${Math.min(100, pct * 2.2)}%"></div>
+          </div>
+        `;
+        regionalBarsContainer.appendChild(row);
+      });
+    }
+
+    // Attention Heatmap Controls
+    heatmapOpacitySlider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      imgAttnHeatmap.style.opacity = (val / 100).toFixed(2);
+      heatmapOpacityLabel.textContent = `Heatmap: ${val}%`;
+    });
+
+    togglePatchGrid.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        patchGridLayer.classList.remove('hidden');
+      } else {
+        patchGridLayer.classList.add('hidden');
+      }
+    });
+
+    // MAE Controls
+    maeMaskSlider.addEventListener('input', (e) => {
+      const pct = parseInt(e.target.value, 10);
+      const maskedCount = Math.round((pct / 100) * 49);
+      maeMaskRatioLabel.textContent = `${pct}% (${maskedCount} / 49 patches masked)`;
+      maeVisibleSub.textContent = `Only ${100 - pct}% (${49 - maskedCount} patches) visible`;
+    });
+
+    btnRunMae.addEventListener('click', () => triggerMAE());
+    btnRerollMae.addEventListener('click', () => triggerMAE(Math.floor(Math.random() * 100000)));
+
+    async function triggerMAE(seed = null) {
+      if (!currentAnalysisData) return;
+      const face = currentAnalysisData.faces[selectedFaceIndex];
+      if (!face) return;
+
+      hideError();
+      btnRunMae.disabled = true;
+      btnRerollMae.disabled = true;
+      maeBtnText.textContent = 'Running FAHR-Face MAE...';
+
+      try {
+        const maskRatio = parseInt(maeMaskSlider.value, 10) / 100.0;
+        const res = await fetch('/api/mae', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            aligned_face_b64: face.aligned_face_b64,
+            mask_ratio: maskRatio,
+            seed: seed,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'MAE reconstruction failed');
+        }
+        const data = await res.json();
+        updateStatusPills(data.status);
+
+        document.querySelectorAll('.mae-placeholder').forEach(el => el.classList.add('hidden'));
+        const origEl = document.getElementById('mae-img-orig');
+        const maskedEl = document.getElementById('mae-img-masked');
+        const compEl = document.getElementById('mae-img-composite');
+        const fullEl = document.getElementById('mae-img-full');
+
+        origEl.src = data.original_b64;
+        maskedEl.src = data.masked_input_b64;
+        compEl.src = data.reconstructed_composite_b64;
+        fullEl.src = data.reconstructed_full_b64;
+
+        [origEl, maskedEl, compEl, fullEl].forEach(el => el.classList.remove('hidden'));
+        maeLossVal.textContent = data.loss.toFixed(4);
+        maeTimeVal.textContent = `${data.inference_ms} ms`;
+      } catch (err) {
+        showError('MAE Error: ' + err.message);
+      } finally {
+        btnRunMae.disabled = false;
+        btnRerollMae.disabled = false;
+        maeBtnText.textContent = 'Reconstruct Masked Face';
+      }
+    }
+
+    // Initial status fetch & support ?autorun=1 query param for automated screenshot capture
+    refreshStatus().then(() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('autorun') === '1') {
+        btnSample.click();
+      }
+    });
+  </script>
+</body>
+</html>

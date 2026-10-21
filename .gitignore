@@ -1,0 +1,33 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Downloaded model weights & detector checkpoints (auto-downloaded on first run)
+checkpoints/*.pth
+checkpoints/*.onnx
+checkpoints/onnx/
+checkpoints/.cache/
+
+# Upstream reference clone
+FAHR-Face/
+
+# Android / Mobile build artifacts & bundled ONNX weights
+mobile/.gradle/
+mobile/.kotlin/
+mobile/build/
+mobile/app/build/
+mobile/local.properties
+mobile/app/src/main/assets/*.onnx
+static/*.apk
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

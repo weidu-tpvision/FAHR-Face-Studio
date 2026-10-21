@@ -56,6 +56,26 @@ flowchart LR
     E --> G["75% Masked Patch Inpainting\n& Pixel MSE Loss"]
 ```
 
+### How the Underlying FAHR-Face Foundation Model Works & Alignment Requirements
+
+Based on the upstream [`AIM-Harvard/FAHR-Face`](https://github.com/AIM-Harvard/FAHR-Face) source code and the published study (*The Lancet Digital Health*, 2026 / [`arXiv:2506.14909`](https://arxiv.org/abs/2506.14909)):
+
+#### 1. Image Processing & ViT-MAE Architecture
+- **Adapted from `facebook/vit-mae-base` to `112 × 112` Resolution:** Rather than training from random initialization, FAHR-Face initialized from Meta AI's `facebook/vit-mae-base` (`224×224`, $14\times 14 = 196$ patches) and bicubically interpolated the encoder and decoder 2D positional embeddings down to a **`7 × 7` grid of 49 non-overlapping `16 × 16` pixel patches** (`112 × 112` RGB input + 1 `[CLS]` token = 50 sequence tokens).
+- **Self-Supervised Pre-training on WebFace42M:** Pre-trained for 23 epochs (`batch_size=1024`) on **40,615,808** facial photographs (~2 million identities) from WebFace42M. During pre-training, **75% of the patches (37 of 49)** are randomly masked; the 12-layer ViT encoder processes only the visible patches while the decoder reconstructs the missing raw pixels.
+- **Downstream Fine-Tuning (`FAHR-FaceAge`):** The MAE decoder is discarded, and a linear regression head maps the 768-dimensional `[CLS]` token embedding from the 12-layer encoder to a continuous biological age prediction (trained with L1/MAE loss across 743,152 images in a two-stage oversampled + age-balanced curriculum).
+
+#### 2. Face Alignment & Pose Requirements (2D Roll Tilt vs. 3D Frontal Yaw)
+
+A key distinction exists between **2D in-plane head tilt (roll)** and **3D out-of-plane viewing angle (yaw)**:
+
+| Property | Requirement | Upstream Code & Paper Evidence |
+| :--- | :--- | :--- |
+| **Input Resolution & Normalization** | **`112 × 112` RGB**, ImageNet mean/std | `ViTConfig(image_size=112)` with `patch_size=16` ($7\times 7$ patch grid) and `Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])`. |
+| **2D Vertical / Eye-Horizontal Alignment (No Tilt / Roll)** | **Required** prior to model inference | Because ViTs rely on fixed learned positional embeddings for each of the $7\times 7$ patches, the network expects upright, eye-level faces. All 40.6M WebFace42M pre-training images and downstream training/clinical cohorts were pre-aligned with `RetinaFace.extract_faces(..., align=True)` (`other/face_crop_align.py`, `run.py`, Paper pp. 22–23, 27), which rotates the image in 2D so the inter-ocular line is horizontal ($\Delta y = 0$). **FAHR-Face Studio** performs this eye-horizontal affine alignment automatically (`face_pipeline.py`) so users can upload tilted photos without manual cropping. |
+| **Residual Tilt Tolerance** | **$\pm 10^\circ$** (`FaceAge`) / **$\pm 5^\circ$** (`FaceSurvival`) | To prevent sensitivity to minor landmark jitter after alignment, downstream supervised training added `transforms.RandomRotation(degrees=10)` (`train_fahr_faceage/loader.py`, Paper p. 23) along with `RandomResizedCrop(scale=(0.8, 1.0))` and `RandomHorizontalFlip(p=0.5)`. |
+| **3D Frontal Pose (Yaw / Viewing Angle)** | **Not strictly required** (robust to moderate yaw, e.g., $\pm 22.5^\circ$) | WebFace42M pre-training spans full yaw angles from $-90^\circ$ to $+90^\circ$ (Paper Supplement p. 22). In paired robustness evaluations on the **FEI Face Database** ($n=200$ pairs at $22.5^\circ$ left/right yaw vs. frontal), `FAHR-FaceAge` showed no statistically significant difference ($P > 0.05$, mean difference $0.25\text{--}0.55$ years, Paper pp. 5, 26, 34). *(Note: Only the paper's population-level 3D canonical MediaPipe mesh projection on p. 28 assumes a frontal camera perspective).* |
+
 ---
 
 ## Quickstart

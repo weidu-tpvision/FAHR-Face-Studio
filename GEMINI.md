@@ -47,9 +47,14 @@ It provides:
   - Pixel values scaled to `[0, 1]` and normalized with ImageNet statistics (`mean=[0.485, 0.456, 0.406]`, `std=[0.229, 0.224, 0.225]`).
 
 ### E. Standalone On-Device Android AI Engine (`export_onnx.py` & `OnDeviceAiEngine.kt`)
-- `export_onnx.py` wraps `ViTForAgeRegression` (including the 12-layer Attention Rollout matrix multiplication) and `ViTMAEForPreTraining` (including patch unpatchifying and MSE loss) into self-contained ONNX graphs (`opset=17`) and applies `UINT8` dynamic quantization (`fahr_faceage_int8.onnx` = `82.4 MB`, `fahr_face_mae_int8.onnx` = `107.7 MB`).
+- `export_onnx.py` wraps `ViTForAgeRegression` (including 12-layer Attention Rollout matrix multiplication), `ViTMAEForPreTraining` (including patch unpatchifying and MSE loss), and `RetinaFace` (ResNet50 backbone with baked-in 640×640 anchor decoding into 16,800 anchors × 15 values) into self-contained ONNX graphs (`opset=17`) and applies `UINT8` dynamic quantization:
+  - `fahr_faceage_int8.onnx` = `82.4 MB`
+  - `fahr_face_mae_int8.onnx` = `107.7 MB`
+  - `retinaface_int8.onnx` = `28.7 MB`
+  - `face_detection_yunet_2023mar.onnx` = `230 KB`
 - On Android (`mobile/app/src/main/java/com/fahrface/mobile/OnDeviceAiEngine.kt`), the `.onnx` assets are stream-copied once to `context.filesDir` so `onnxruntime-android` can memory-map (`mmap`) them directly from flash storage without consuming JVM heap memory.
-- `OnDeviceAiEngine.kt` executes `face_detection_yunet_2023mar.onnx` (`640×640` multi-stride anchor decoding + NMS), performs eye-horizontal affine alignment via `android.graphics.Matrix`, runs `fahr_faceage_int8.onnx` and `fahr_face_mae_int8.onnx`, and renders the `224×224` Turbo colormap attention heatmap 100% offline on the Pixel 9.
+- `OnDeviceAiEngine.kt` executes on-device dual detectors: upstream **RetinaFace ResNet50** (default, identical to the Harvard research benchmark) and lightweight **YuNet**, performs eye-horizontal affine alignment via `android.graphics.Matrix`, runs `fahr_faceage_int8.onnx` and `fahr_face_mae_int8.onnx`, and renders the `224×224` Turbo colormap attention heatmap 100% offline on the Pixel 9.
+- `MainActivity.kt` provides interactive `FilterChip` switching between `RetinaFace (Upstream)` and `YuNet (Fast)` right in the `Scan & Age` tab, automatically re-running inference on the active portrait.
 
 ---
 

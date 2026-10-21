@@ -45,6 +45,7 @@ data class FaceAnalysis(
     val confidence: Float,
     val alignmentAngleDeg: Float,
     val interocularPx: Float?,
+    val detectorBackend: String = "RetinaFace",
     val landmarks: LandmarkPoints?,
     val predictedAge: Float,
     val inferenceMs: Float,
@@ -77,6 +78,7 @@ data class MaeResult(
 object OnDeviceAiEngine {
 
     private const val YUNET_ASSET = "face_detection_yunet_2023mar.onnx"
+    private const val RETINAFACE_ASSET = "retinaface_int8.onnx"
     private const val AGE_ASSET = "fahr_faceage_int8.onnx"
     private const val MAE_ASSET = "fahr_face_mae_int8.onnx"
     private const val SAMPLE_ASSET = "sample_face.jpg"
@@ -84,6 +86,7 @@ object OnDeviceAiEngine {
     private val initMutex = Mutex()
     private var ortEnv: OrtEnvironment? = null
     private var yunetSession: OrtSession? = null
+    private var retinafaceSession: OrtSession? = null
     private var ageSession: OrtSession? = null
     private var maeSession: OrtSession? = null
 
@@ -120,9 +123,9 @@ object OnDeviceAiEngine {
     }
 
     private suspend fun ensureSessions(context: Context) {
-        if (yunetSession != null && ageSession != null && maeSession != null) return
+        if (yunetSession != null && retinafaceSession != null && ageSession != null && maeSession != null) return
         initMutex.withLock {
-            if (yunetSession != null && ageSession != null && maeSession != null) return
+            if (yunetSession != null && retinafaceSession != null && ageSession != null && maeSession != null) return
             val env = OrtEnvironment.getEnvironment()
             ortEnv = env
             val opts = OrtSession.SessionOptions().apply {
@@ -130,10 +133,12 @@ object OnDeviceAiEngine {
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             }
             val yunetFile = ensureAssetFile(context, YUNET_ASSET)
+            val retinafaceFile = ensureAssetFile(context, RETINAFACE_ASSET)
             val ageFile = ensureAssetFile(context, AGE_ASSET)
             val maeFile = ensureAssetFile(context, MAE_ASSET)
 
             yunetSession = env.createSession(yunetFile.absolutePath, opts)
+            retinafaceSession = env.createSession(retinafaceFile.absolutePath, opts)
             ageSession = env.createSession(ageFile.absolutePath, opts)
             maeSession = env.createSession(maeFile.absolutePath, opts)
         }
@@ -293,6 +298,87 @@ object OnDeviceAiEngine {
         return kept.sortedByDescending { it.w * it.h }
     }
 
+    private fun detectFacesRetinaFace(bmp: Bitmap): List<RawFaceDet> {
+        val env = ortEnv ?: return emptyList()
+        val session = retinafaceSession ?: return emptyList()
+
+        val inputSize = 640
+        val resized = Bitmap.createScaledBitmap(bmp, inputSize, inputSize, true)
+        val pixels = IntArray(inputSize * inputSize)
+        resized.getPixels(pixels, 0, inputSize, 0, 0, inputSize, inputSize)
+
+        val planeSize = inputSize * inputSize
+        val floatBuf = FloatBuffer.allocate(3 * planeSize)
+        // RetinaFace expects RGB [0..255] float32
+        for (i in 0 until planeSize) {
+            val px = pixels[i]
+            val r = ((px shr 16) and 0xFF).toFloat()
+            val g = ((px shr 8) and 0xFF).toFloat()
+            val b = (px and 0xFF).toFloat()
+            floatBuf.put(i, r)
+            floatBuf.put(planeSize + i, g)
+            floatBuf.put(2 * planeSize + i, b)
+        }
+        floatBuf.rewind()
+
+        val scaleX = bmp.width.toFloat() / inputSize.toFloat()
+        val scaleY = bmp.height.toFloat() / inputSize.toFloat()
+        val candidates = mutableListOf<RawFaceDet>()
+
+        OnnxTensor.createTensor(env, floatBuf, longArrayOf(1, 3, 640, 640)).use { tensor ->
+            session.run(mapOf("input" to tensor)).use { results ->
+                @Suppress("UNCHECKED_CAST")
+                val detArr = (results[0].value as Array<Array<FloatArray>>)[0]
+
+                for (det in detArr) {
+                    val score = det[14]
+                    if (score < 0.6f) continue
+
+                    val x1 = det[0] * scaleX
+                    val y1 = det[1] * scaleY
+                    val bw = det[2] * scaleX
+                    val bh = det[3] * scaleY
+
+                    val rightEye = Pair(det[4] * scaleX, det[5] * scaleY)
+                    val leftEye = Pair(det[6] * scaleX, det[7] * scaleY)
+                    val nose = Pair(det[8] * scaleX, det[9] * scaleY)
+                    val rightMouth = Pair(det[10] * scaleX, det[11] * scaleY)
+                    val leftMouth = Pair(det[12] * scaleX, det[13] * scaleY)
+
+                    candidates.add(
+                        RawFaceDet(
+                            x1 = x1,
+                            y1 = y1,
+                            w = bw,
+                            h = bh,
+                            rightEye = rightEye,
+                            leftEye = leftEye,
+                            nose = nose,
+                            rightMouth = rightMouth,
+                            leftMouth = leftMouth,
+                            score = score
+                        )
+                    )
+                }
+            }
+        }
+
+        // Non-Maximum Suppression (NMS = 0.4)
+        candidates.sortByDescending { it.score }
+        val kept = mutableListOf<RawFaceDet>()
+        for (cand in candidates) {
+            var overlap = false
+            for (k in kept) {
+                if (iou(cand, k) > 0.4f) {
+                    overlap = true
+                    break
+                }
+            }
+            if (!overlap) kept.add(cand)
+        }
+        return kept.sortedByDescending { it.w * it.h }
+    }
+
     private fun alignAndCropFace(
         srcBmp: Bitmap,
         bbox: IntArray,
@@ -432,7 +518,8 @@ object OnDeviceAiEngine {
 
     suspend fun analyzePhotoOnDevice(
         context: Context,
-        imageBytes: ByteArray
+        imageBytes: ByteArray,
+        detectorBackend: String = "retinaface"
     ): AnalyzeResult = withContext(Dispatchers.Default) {
         ensureSessions(context)
 
@@ -440,7 +527,13 @@ object OnDeviceAiEngine {
         val origW = origBmp.width
         val origH = origBmp.height
 
-        val rawDets = detectFacesYuNet(origBmp)
+        val rawDets = if (detectorBackend.equals("retinaface", ignoreCase = true)) {
+            val rf = detectFacesRetinaFace(origBmp)
+            if (rf.isNotEmpty()) rf else detectFacesYuNet(origBmp)
+        } else {
+            detectFacesYuNet(origBmp)
+        }
+        val actualDetector = if (detectorBackend.equals("retinaface", ignoreCase = true)) "RetinaFace" else "YuNet"
         val facesList = mutableListOf<FaceAnalysis>()
         cachedAlignedBitmaps.clear()
 
@@ -494,6 +587,7 @@ object OnDeviceAiEngine {
                         confidence = det.score,
                         alignmentAngleDeg = alignAngle,
                         interocularPx = iod,
+                        detectorBackend = actualDetector,
                         landmarks = LandmarkPoints(
                             rightEye = det.rightEye,
                             leftEye = det.leftEye,
@@ -536,6 +630,7 @@ object OnDeviceAiEngine {
                     confidence = 1.0f,
                     alignmentAngleDeg = 0.0f,
                     interocularPx = null,
+                    detectorBackend = "Fallback (Pre-Cropped)",
                     landmarks = null,
                     predictedAge = (predAge * 100f).roundToInt() / 100f,
                     inferenceMs = elapsedMs,

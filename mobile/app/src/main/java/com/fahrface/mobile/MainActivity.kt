@@ -92,6 +92,8 @@ fun FAHRFaceMobileApp() {
     var selectedFaceIdx by remember { mutableIntStateOf(0) }
     var chronoAgeText by remember { mutableStateOf("42") }
     var showLandmarks by remember { mutableStateOf(true) }
+    var selectedDetector by remember { mutableStateOf("retinaface") }
+    var lastAnalyzedBytes by remember { mutableStateOf<ByteArray?>(null) }
 
     // Tab 2 state
     var heatmapOpacity by remember { mutableFloatStateOf(0.55f) }
@@ -103,13 +105,15 @@ fun FAHRFaceMobileApp() {
 
     val activeFace = analysisResult?.faces?.getOrNull(selectedFaceIdx)
 
-    fun triggerAnalysis(bytes: ByteArray) {
+    fun triggerAnalysis(bytes: ByteArray, detector: String = selectedDetector) {
+        lastAnalyzedBytes = bytes
         scope.launch {
             isLoading = true
             errorMessage = null
-            statusText = "Running On-Device AI (YuNet + FAHR-FaceAge + MAE)..."
+            val detLabel = if (detector == "retinaface") "RetinaFace (118M)" else "YuNet (Fast)"
+            statusText = "Running On-Device AI ($detLabel + FAHR-FaceAge + MAE)..."
             try {
-                val res = OnDeviceAiEngine.analyzePhotoOnDevice(context, bytes)
+                val res = OnDeviceAiEngine.analyzePhotoOnDevice(context, bytes, detectorBackend = detector)
                 analysisResult = res
                 selectedFaceIdx = 0
                 if (res.faces.isNotEmpty()) {
@@ -340,6 +344,11 @@ fun FAHRFaceMobileApp() {
                     onChronoAgeChange = { chronoAgeText = it },
                     showLandmarks = showLandmarks,
                     onToggleLandmarks = { showLandmarks = it },
+                    selectedDetector = selectedDetector,
+                    onSelectDetector = { det ->
+                        selectedDetector = det
+                        lastAnalyzedBytes?.let { triggerAnalysis(it, det) }
+                    },
                     onTakeSelfie = { cameraLauncher.launch(null) },
                     onPickGallery = { galleryLauncher.launch("image/*") }
                 )
@@ -375,6 +384,8 @@ fun ScanAndAgeTab(
     onChronoAgeChange: (String) -> Unit,
     showLandmarks: Boolean,
     onToggleLandmarks: (Boolean) -> Unit,
+    selectedDetector: String,
+    onSelectDetector: (String) -> Unit,
     onTakeSelfie: () -> Unit,
     onPickGallery: () -> Unit
 ) {
@@ -404,6 +415,33 @@ fun ScanAndAgeTab(
         ) {
             Text("🖼️ Photo Gallery", color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
         }
+    }
+
+    // Detector Model Switcher (RetinaFace vs YuNet)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Detector:", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        FilterChip(
+            selected = selectedDetector == "retinaface",
+            onClick = { onSelectDetector("retinaface") },
+            label = { Text("RetinaFace (Upstream)", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = SkyAccent.copy(alpha = 0.2f),
+                selectedLabelColor = SkyAccent
+            )
+        )
+        FilterChip(
+            selected = selectedDetector == "yunet",
+            onClick = { onSelectDetector("yunet") },
+            label = { Text("YuNet (Fast)", fontSize = 11.sp, fontWeight = FontWeight.Medium) },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = SkyAccent.copy(alpha = 0.2f),
+                selectedLabelColor = SkyAccent
+            )
+        )
     }
 
     // Portrait & Landmarks Canvas Card
@@ -633,8 +671,16 @@ fun ScanAndAgeTab(
             // Compact Telemetry Footer
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Text(
+                    text = if (activeFace != null) "Det: ${activeFace.detectorBackend.uppercase()}" else "Det: —",
+                    color = SkyAccent,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(
                     text = if (activeFace != null) "Conf: ${String.format("%.1f%%", activeFace.confidence * 100f)}" else "Conf: —",
                     color = TextSecondary,

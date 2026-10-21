@@ -6,11 +6,13 @@ Built on top of [**FAHR-Face**](https://github.com/AIM-Harvard/FAHR-Face) (*Foun
 
 ![FAHR-Face Studio UI](docs/ui-screenshot.png)
 
-### Mobile Edition (Google Pixel 9 — 3-Tab Concise UI)
+### Mobile Edition (Google Pixel 9 — 3-Tab On-Device AI)
 
-Designed for the **Google Pixel 9** (`412 × 915` logical viewport) with a clutter-free, thumb-friendly **3-Tab Bottom Navigation Bar** (**Scan & Age** · **AI Heatmap** · **MAE Rebuild**), available both as a **Native Android App (`./mobile` in Kotlin & Jetpack Compose)** and an **Installable Mobile Web App (`/mobile`)**:
+Designed for the **Google Pixel 9** (`412 × 915` viewport) with a clean, thumb-friendly **3-Tab Bottom Navigation Bar** (**Scan & Age** · **AI Heatmap** · **MAE Rebuild**), running **100% offline** directly on the device's Tensor G4 processor. Available both as a **Native Android App (`./mobile` in Kotlin & Jetpack Compose)** with on-device dual detectors (**RetinaFace ResNet50** & **YuNet**) and as an **Installable Mobile Web App (`/mobile`)**:
 
-![FAHR-Face Mobile Pixel 9 UI](docs/mobile-pixel9-ui.png)
+<p align="center">
+  <img src="docs/mobile-pixel9-ui.png" alt="FAHR-Face Mobile Pixel 9 UI running live on device" width="360" />
+</p>
 
 ---
 
@@ -175,10 +177,10 @@ Once the server is running, interactive Swagger documentation is available at `h
 │   ├── settings.gradle.kts
 │   └── app/src/main/java/com/fahrface/mobile/
 │       ├── MainActivity.kt      # 3-Tab Bottom Navigation UI (Scan & Age | AI Heatmap | MAE Rebuild)
-│       └── OnDeviceAiEngine.kt  # 100% Offline On-Device YuNet + FAHR-FaceAge + MAE via onnxruntime-android
+│       └── OnDeviceAiEngine.kt  # 100% Offline On-Device RetinaFace + YuNet + FAHR-FaceAge + MAE via onnxruntime-android
 └── docs/
     ├── ui-screenshot.png    # Desktop Studio full-interface screenshot
-    └── mobile-pixel9-ui.png # Pixel 9 3-Tab Mobile UI showcase
+    └── mobile-pixel9-ui.png # Pixel 9 on-device live screenshot (Tensor G4)
 ```
 
 ---

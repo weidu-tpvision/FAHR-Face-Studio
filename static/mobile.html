@@ -140,6 +140,15 @@
           </label>
         </div>
 
+        <!-- Alignment Detector Selector Pill Row -->
+        <div class="flex items-center justify-between text-xs px-1">
+          <span class="text-slate-400 text-[11px] font-medium">Alignment Detector:</span>
+          <select id="m-detector-select" class="text-[11px] px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-sky-300 font-medium focus:outline-none">
+            <option value="yunet">OpenCV YuNet (Fast, 230 KB)</option>
+            <option value="retinaface">RetinaFace (Upstream, 118 MB)</option>
+          </select>
+        </div>
+
         <!-- Portrait Canvas Card -->
         <div class="m3-surface rounded-2xl p-2.5 flex flex-col">
           <div class="relative rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center h-[290px]">
@@ -434,6 +443,8 @@
       fd.append('file', fileBlob);
       const chrono = document.getElementById('m-chrono-input').value;
       if (chrono) fd.append('chronological_age', chrono);
+      const mDetector = document.getElementById('m-detector-select');
+      if (mDetector) fd.append('detector_backend', mDetector.value);
 
       try {
         const res = await fetch('/api/analyze', { method: 'POST', body: fd });
@@ -527,7 +538,8 @@
 
       document.getElementById('m-pred-age').textContent = f.predicted_age.toFixed(1);
       document.getElementById('badge-latency').textContent = `${f.inference_ms} ms (${f.device.toUpperCase()})`;
-      document.getElementById('m-tel-conf').textContent = `Conf: ${(f.confidence * 100).toFixed(1)}%`;
+      const det = f.detector_backend === 'retinaface' ? 'RetinaFace' : 'YuNet';
+      document.getElementById('m-tel-conf').textContent = `${det} · ${(f.confidence * 100).toFixed(1)}%`;
       const tilt = f.alignment_angle_deg ?? 0;
       document.getElementById('m-tel-tilt').textContent = `Tilt: ${tilt >= 0 ? '+' : ''}${tilt.toFixed(2)}°`;
       document.getElementById('m-tel-iod').textContent = `IOD: ${f.interocular_px ?? '—'}px`;

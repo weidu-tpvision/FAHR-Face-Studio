@@ -11,3 +11,4 @@ numpy>=1.26.0
 onnx>=1.17.0
 onnxruntime>=1.20.0
 onnxscript>=0.1.0
+retina-face>=0.0.19

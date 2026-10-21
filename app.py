@@ -9,7 +9,11 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from PIL import Image, ImageOps
 
-from face_pipeline import detect_and_align_faces
+from face_pipeline import (
+    detect_and_align_faces,
+    get_available_detectors,
+    is_retinaface_available,
+)
 from model_service import FAHRFaceService, pil_to_base64
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -53,7 +57,11 @@ def api_status(warmup: bool = False):
     if warmup:
         service.ensure_age_model()
         service.ensure_mae_model()
-    return service.get_status()
+    st = service.get_status()
+    st["available_detectors"] = get_available_detectors()
+    st["retinaface_available"] = is_retinaface_available()
+    st["default_detector"] = "yunet"
+    return st
 
 
 @app.post("/api/analyze")
@@ -62,6 +70,7 @@ async def api_analyze(
     chronological_age: Optional[float] = Form(None),
     already_cropped: bool = Form(False),
     score_threshold: float = Form(0.55),
+    detector_backend: str = Form("yunet"),
 ):
     try:
         contents = await file.read()
@@ -74,6 +83,7 @@ async def api_analyze(
         pil_img,
         score_threshold=score_threshold,
         already_cropped=already_cropped,
+        detector_backend=detector_backend,
     )
 
     analyzed_faces = []
@@ -89,6 +99,7 @@ async def api_analyze(
                 "confidence": f["confidence"],
                 "alignment_angle_deg": f.get("alignment_angle_deg", 0.0),
                 "interocular_px": f.get("interocular_px"),
+                "detector_backend": f.get("detector_backend", detector_backend),
                 "landmarks": f["landmarks"],
                 "is_fallback": f["is_fallback"],
                 **age_res,
@@ -99,6 +110,7 @@ async def api_analyze(
         "image_width": pil_img.width,
         "image_height": pil_img.height,
         "original_image_b64": pil_to_base64(pil_img, fmt="JPEG"),
+        "detector_backend": detector_backend,
         "num_faces_detected": len(analyzed_faces),
         "faces": analyzed_faces,
         "status": service.get_status(),

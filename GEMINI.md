@@ -19,13 +19,13 @@ It provides:
 
 ## 2. Architecture & Key Technical Decisions
 
-### A. Zero-TensorFlow Face Detection & Alignment (`face_pipeline.py`)
-- The upstream `AIM-Harvard/FAHR-Face` repository used `retina-face==0.0.17` on Python 3.8, which pulls in TensorFlow/Keras alongside PyTorch.
-- To keep this project 100% PyTorch-native and compatible with Python 3.10–3.14, `face_pipeline.py` uses OpenCV's lightweight **YuNet** 5-point landmark detector (`cv2.FaceDetectorYN` with `face_detection_yunet_2023mar.onnx`, 230 KB, auto-downloaded to `./checkpoints/`).
+### A. Dual Face Detection & Alignment Engine (`face_pipeline.py`)
+- **OpenCV YuNet (Default)**: Uses OpenCV's lightweight **YuNet** 5-point landmark detector (`cv2.FaceDetectorYN` with `face_detection_yunet_2023mar.onnx`, 230 KB, auto-downloaded to `./checkpoints/`). Runs in ~10–25 ms without heavy dependencies, compatible with Python 3.10–3.14 and standalone Android ONNX Runtime.
+- **RetinaFace (Upstream Reference)**: Pluggable support for `retina-face>=0.0.19` (powered by PyTorch/ONNX weights, downloading `retinaface.pth` ~118 MB on first use) to ensure 1:1 parity with the original AIM-Harvard benchmark scripts.
 - **Eye-Horizontal Alignment (`align_and_crop_face`)**:
   - Computes the angle $\theta = \text{atan2}(\Delta y, \Delta x)$ between the subject's right and left eye landmarks.
   - Applies an affine rotation (`cv2.getRotationMatrix2D` + `cv2.warpAffine`) around the inter-ocular midpoint so the eyes are horizontal, then crops the transformed face bounding box.
-  - Exposes `alignment_angle_deg`, `interocular_px`, `bbox`, and 5-point `landmarks` in the API response.
+  - Exposes `alignment_angle_deg`, `interocular_px`, `bbox`, `detector_backend`, and 5-point `landmarks` in the API response.
 
 ### B. `transformers 4.x` vs `5.x` Checkpoint Compatibility (`model_service.py`)
 - The upstream checkpoints (`fahr_faceage.pth` and `fahr_face.pth`) were saved using `transformers 4.38.2`, where `ViTModel` layer keys are named:

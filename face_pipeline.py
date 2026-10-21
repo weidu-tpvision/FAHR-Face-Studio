@@ -13,6 +13,28 @@ YUNET_PATH = os.path.join(MODELS_DIR, "face_detection_yunet_2023mar.onnx")
 
 _detector_lock = threading.Lock()
 _cached_detector: Optional[ Any ] = None
+_retinaface_lock = threading.Lock()
+_retinaface_available: Optional[bool] = None
+
+
+def is_retinaface_available() -> bool:
+    """Check if retina-face package is installed and can be imported."""
+    global _retinaface_available
+    if _retinaface_available is None:
+        try:
+            import retinaface  # noqa: F401
+            _retinaface_available = True
+        except Exception:
+            _retinaface_available = False
+    return _retinaface_available
+
+
+def get_available_detectors() -> List[str]:
+    """Returns list of available detector backends."""
+    detectors = ["yunet"]
+    if is_retinaface_available():
+        detectors.append("retinaface")
+    return detectors
 
 
 def ensure_yunet_model() -> str:
@@ -100,14 +122,95 @@ def align_and_crop_face(
     return Image.fromarray(cropped)
 
 
+def _detect_and_align_retinaface(
+    img_rgb: np.ndarray,
+    score_threshold: float = 0.5,
+) -> List[Dict[str, Any]]:
+    """Detects and aligns faces using the upstream RetinaFace model."""
+    if not is_retinaface_available():
+        return []
+    from retinaface import RetinaFace
+
+    orig_h, orig_w = img_rgb.shape[:2]
+    img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+
+    with _retinaface_lock:
+        resp = RetinaFace.detect_faces(img_bgr, threshold=score_threshold)
+
+    if not resp or not isinstance(resp, dict):
+        return []
+
+    faces_list = []
+    for face_key, identity in resp.items():
+        area = identity.get("facial_area", [0, 0, orig_w, orig_h])
+        x1, y1, x2, y2 = area
+        bw = max(0, x2 - x1)
+        bh = max(0, y2 - y1)
+        if bw < 16 or bh < 16:
+            continue
+        faces_list.append((identity, (x1, y1, bw, bh)))
+
+    # Sort largest face first
+    faces_list.sort(key=lambda item: item[1][2] * item[1][3], reverse=True)
+
+    results: List[Dict[str, Any]] = []
+    for idx, (identity, (x, y, bw, bh)) in enumerate(faces_list):
+        conf = float(identity.get("score", 1.0))
+        lm = identity.get("landmarks", {})
+        re = tuple(lm.get("right_eye", (x + bw * 0.35, y + bh * 0.35)))
+        le = tuple(lm.get("left_eye", (x + bw * 0.65, y + bh * 0.35)))
+        nose = tuple(lm.get("nose", (x + bw * 0.5, y + bh * 0.55)))
+        mr = tuple(lm.get("mouth_right", lm.get("right_mouth", (x + bw * 0.38, y + bh * 0.75))))
+        ml = tuple(lm.get("mouth_left", lm.get("left_mouth", (x + bw * 0.62, y + bh * 0.75))))
+
+        aligned_pil = align_and_crop_face(img_rgb, (x, y, bw, bh), re, le)
+
+        re_pt, le_pt = re, le
+        if re_pt[0] > le_pt[0]:
+            re_pt, le_pt = le_pt, re_pt
+        dx = float(le_pt[0] - re_pt[0])
+        dy = float(le_pt[1] - re_pt[1])
+        align_angle = round(math.degrees(math.atan2(dy, dx)), 2)
+        interocular_dist = round(math.hypot(dx, dy), 1)
+
+        results.append(
+            {
+                "face_id": idx,
+                "bbox": [int(x), int(y), int(bw), int(bh)],
+                "confidence": round(conf, 4),
+                "alignment_angle_deg": align_angle,
+                "interocular_px": interocular_dist,
+                "detector_backend": "retinaface",
+                "landmarks": {
+                    "right_eye": [round(float(re[0]), 1), round(float(re[1]), 1)],
+                    "left_eye": [round(float(le[0]), 1), round(float(le[1]), 1)],
+                    "nose": [round(float(nose[0]), 1), round(float(nose[1]), 1)],
+                    "right_mouth": [round(float(mr[0]), 1), round(float(mr[1]), 1)],
+                    "left_mouth": [round(float(ml[0]), 1), round(float(ml[1]), 1)],
+                },
+                "aligned_pil": aligned_pil,
+                "is_fallback": False,
+            }
+        )
+
+    return results
+
+
 def detect_and_align_faces(
     pil_image: Image.Image,
     score_threshold: float = 0.6,
     already_cropped: bool = False,
+    detector_backend: str = "yunet",
 ) -> List[Dict[str, Any]]:
     """
     Detects all faces in a PIL image, aligns each one horizontally by eye landmarks,
     and returns metadata + aligned PIL images ready for 112x112 FAHR-Face inference.
+
+    Args:
+        pil_image: Input PIL Image in RGB format.
+        score_threshold: Confidence threshold for face detection.
+        already_cropped: If True, bypasses detection and treats image as single cropped face.
+        detector_backend: 'yunet' (default, lightweight OpenCV ONNX) or 'retinaface' (upstream reference).
     """
     img_rgb = np.array(pil_image.convert("RGB"))
     orig_h, orig_w = img_rgb.shape[:2]
@@ -120,9 +223,30 @@ def detect_and_align_faces(
                 "confidence": 1.0,
                 "alignment_angle_deg": 0.0,
                 "interocular_px": None,
+                "detector_backend": "cropped",
                 "landmarks": None,
                 "aligned_pil": pil_image.convert("RGB"),
                 "is_fallback": False,
+            }
+        ]
+
+    normalized_backend = (detector_backend or "yunet").strip().lower()
+    if normalized_backend in ("retinaface", "retina-face", "retina_face"):
+        rf_results = _detect_and_align_retinaface(img_rgb, score_threshold=score_threshold)
+        if rf_results:
+            return rf_results
+        # If RetinaFace detected 0 faces, return fallback full image
+        return [
+            {
+                "face_id": 0,
+                "bbox": [0, 0, orig_w, orig_h],
+                "confidence": 1.0,
+                "alignment_angle_deg": 0.0,
+                "interocular_px": None,
+                "detector_backend": "retinaface",
+                "landmarks": None,
+                "aligned_pil": pil_image.convert("RGB"),
+                "is_fallback": True,
             }
         ]
 
@@ -182,6 +306,7 @@ def detect_and_align_faces(
                     "confidence": round(conf, 4),
                     "alignment_angle_deg": align_angle,
                     "interocular_px": interocular_dist,
+                    "detector_backend": "yunet",
                     "landmarks": {
                         "right_eye": [round(right_eye[0], 1), round(right_eye[1], 1)],
                         "left_eye": [round(left_eye[0], 1), round(left_eye[1], 1)],
@@ -208,10 +333,13 @@ def detect_and_align_faces(
                 "confidence": 1.0,
                 "alignment_angle_deg": 0.0,
                 "interocular_px": None,
+                "detector_backend": "yunet",
                 "landmarks": None,
                 "aligned_pil": pil_image.convert("RGB"),
                 "is_fallback": True,
             }
         )
+
+    return results
 
     return results

@@ -27,9 +27,11 @@ While the upstream research repository provides batch CLI scripts requiring a le
 - **1-Click Sample Demo, Photo Upload & Live Webcam Capture**
   - Test immediately with the built-in synthetic studio portrait (**"Try Sample Portrait"**), drag-and-drop any portrait or group photo, or capture a frame live from your webcam.
   - Automatic EXIF orientation correction for smartphone portraits.
-- **Lightweight 5-Point Landmark Detection & Eye-Horizontal Alignment**
-  - Replaces the heavy TensorFlow/Keras `retina-face` dependency with OpenCV's 230 KB **YuNet** 5-point landmark detector (`cv2.FaceDetectorYN`).
+- **Dual 5-Point Landmark Detection & Eye-Horizontal Alignment (YuNet & RetinaFace)**
+  - **OpenCV YuNet (Default, Fast & Lightweight)**: OpenCV's 230 KB **YuNet** detector (`cv2.FaceDetectorYN`), running in ~10–25 ms without heavy dependencies.
+  - **RetinaFace (Upstream Reference)**: Pluggable support for the exact upstream **RetinaFace** architecture (`retina-face>=0.0.19` powered by PyTorch/ONNX weights), ensuring 1:1 fidelity with the original Harvard publication.
   - Automatically detects single or multiple faces in an image, computes the inter-ocular tilt angle ($\theta^\circ$), rotates the face around the eye midpoint so the eyes are horizontal (`align=True`), and crops to the `112×112` RGB resolution required by FAHR-Face.
+  - Easily toggle between **YuNet** and **RetinaFace** from the web UI dropdown or API parameter.
 - **Biological FaceAge & Age Gap ($\Delta\text{Age}$) Calculator**
   - Runs [`ViTForAgeRegression`](ViTForAgeEstimation.py) (`fahr_faceage.pth`) in **~40–60 ms on CPU** (even faster on GPU).
   - Dynamically computes $\Delta\text{Age} = \text{Predicted FaceAge} - \text{Chronological Age}$ with an interactive visual biomarker scale.
@@ -148,8 +150,8 @@ Once the server is running, interactive Swagger documentation is available at `h
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/status` | Returns runtime device (`cpu`/`cuda`) and checkpoint cache/load status. Pass `?warmup=true` to preload both models into RAM. |
-| `POST` | `/api/analyze` | Multipart form upload (`file`, optional `chronological_age`, `already_cropped`). Detects & aligns all faces, predicts FaceAge, $\Delta\text{Age}$, and computes 12-layer ViT Attention Rollout heatmaps. |
+| `GET` | `/api/status` | Returns runtime device (`cpu`/`cuda`), available detectors (`["yunet", "retinaface"]`), and checkpoint cache/load status. Pass `?warmup=true` to preload both models into RAM. |
+| `POST` | `/api/analyze` | Multipart form upload (`file`, optional `chronological_age`, `already_cropped`, `detector_backend="yunet"|"retinaface"`). Detects & aligns all faces, predicts FaceAge, $\Delta\text{Age}$, and computes 12-layer ViT Attention Rollout heatmaps. |
 | `POST` | `/api/mae` | JSON body (`aligned_face_b64`, `mask_ratio=0.75`, optional `seed`). Runs `FAHR-Face` Masked Autoencoder patch reconstruction. |
 
 ---
